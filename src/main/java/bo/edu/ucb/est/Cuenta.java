@@ -48,11 +48,8 @@ public class Cuenta {
         this.saldo=saldo;
     }
     
-    public void deposito() {
-    
-    }
-    
-    public void retiro() {
-        
+    @Override
+    public String toString() {
+        return "Número de cuenta: "+getNumero()+"\nMoneda: "+getMoneda()+"\nTipo: "+getTipo()+"\nSaldo actual: "+getSaldo()+" "+getMoneda();
     }
 }
