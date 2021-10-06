@@ -1,17 +1,15 @@
 package bo.edu.ucb.est;
 import static java.lang.System.exit;
 import java.util.ArrayList;
-import java.util.InputMismatchException;
 import java.util.List;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.ParseMode;
-// import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
-import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 /**
  *
@@ -26,14 +24,13 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 -1: Menú principal
  0: Ingreso de la opción
  1: Visualización del saldo
- 2: 
-21: 
- 3:
-31:
- 4:
-41:
-42:
- 5:
+ 2: Realización de retiro - elección de cuenta
+21: Realización de retiro
+ 3: Realización de depósito - elección de cuenta
+31: Realización de depósito
+ 4: Creación de cuenta - elección de moneda
+41: Creación de cuenta - elección de tipo
+ 5: Terminación de sesión
 */
 public class Atm extends TelegramLongPollingBot {
     private List<Usuario> usuarios=new ArrayList<Usuario>();
@@ -65,15 +62,9 @@ public class Atm extends TelegramLongPollingBot {
             }
             case 1: break;
         }
-    	/*if (aux==0) { // si no existe todavía
-            Usuario usuario=new Usuario(idusuario,-6);
-            usuarios.add(usuario);
-    	}*/
     	System.out.println("Mensaje: "+update.toString()+"\n");
         
         if (update.hasMessage()) {
-            Message message=update.getMessage();
-            if (message.hasText()) { // ***************
             for (int i=0; i<usuarios.size(); i++) {
                 if ((usuarios.get(i).getUserId()).equals(update.getMessage().getFrom().getId())) {
                     int state=usuarios.get(i).getEstado();
@@ -88,14 +79,51 @@ public class Atm extends TelegramLongPollingBot {
                         case -5: {
                             usuarios.get(i).setNombre(update.getMessage().getText());
                             enviarMensaje(update,"Por favor, elija un PIN de seguridad. Este le será requerido cada vez que ingrese al sistema.");
+                            enviarMensaje(update,"⚠ _Aviso importante_ ⚠: Una vez que ingrese el PIN elegido, este se eliminará del chat por razones de seguridad. Se le recomienda que antes de ingresar su PIN, lo guarde en un lugar seguro.");
                             usuarios.get(i).setEstado(-4);
                             break;
                         }
                         case -4: {
                             usuarios.get(i).setPin(update.getMessage().getText());
                             enviarMensaje(update,"¡Se le ha registrado exitosamente!");
-                            enviarMensaje(update,"_Envíe un mensaje cualquiera para continuar._ 📩");
+                            // Elimina el mensaje del PIN, por seguridad
+                            DeleteMessage delete=new DeleteMessage();
+                            delete.setChatId(update.getMessage().getChatId().toString());
+                            delete.setMessageId(update.getMessage().getMessageId());
+                            try {
+                                execute(delete);
+                            }
+                            catch (TelegramApiException e) {
+                                e.printStackTrace();
+                            }
                             usuarios.get(i).setEstado(-3);
+                            
+                            ReplyKeyboardMarkup rkm=new ReplyKeyboardMarkup();
+                            List<KeyboardRow> lista=new ArrayList<>();
+                            KeyboardRow kr1=new KeyboardRow();
+                            KeyboardRow kr2=new KeyboardRow();
+                            KeyboardButton boton0=new KeyboardButton();
+                            KeyboardButton boton1=new KeyboardButton();
+                            KeyboardButton boton2=new KeyboardButton();
+                            KeyboardButton boton3=new KeyboardButton();
+                            KeyboardButton boton4=new KeyboardButton();
+                            KeyboardButton boton5=new KeyboardButton();
+                            boton0.setText("OK. ¡Gracias!");
+                            boton1.setText("1");
+                            boton2.setText("2");
+                            boton3.setText("3");
+                            boton4.setText("4");
+                            boton5.setText("5");
+                            kr1.add(boton0);
+                            kr2.add(boton1);
+                            kr2.add(boton2);
+                            kr2.add(boton3);
+                            kr2.add(boton4);
+                            kr2.add(boton5);
+                            lista.add(kr1);
+                            lista.add(kr2);
+                            rkm.setKeyboard(lista);
+                            enviarMensajeBoton(update,"_Envíe un mensaje cualquiera para continuar._ 📩",rkm);
                             break;
                         }
                         case -3: {
@@ -107,7 +135,7 @@ public class Atm extends TelegramLongPollingBot {
                         case -2: {
                             if ((update.getMessage().getText()).equals(usuarios.get(i).getPin())) {
                                 enviarMensaje(update,"*¡Bienvenido/a!*");
-                                enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo.\n*2.* Retirar dinero.\n*3.* Depositar dinero.\n*4.* Crear cuenta.\n*5.* Salir.");
+                                enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo\n*2.* Retirar dinero\n*3.* Depositar dinero\n*4.* Crear cuenta\n*5.* Salir");
                                 enviarMensaje(update,"Elija una opción:");
                                 usuarios.get(i).setEstado(0);
                             }
@@ -117,10 +145,20 @@ public class Atm extends TelegramLongPollingBot {
                                 enviarMensaje(update,"Solo por seguridad ¿cuál es su PIN?");
                                 usuarios.get(i).setEstado(-2);
                             }
+                            // Elimina el mensaje del PIN, por seguridad
+                            DeleteMessage delete=new DeleteMessage();
+                            delete.setChatId(update.getMessage().getChatId().toString());
+                            delete.setMessageId(update.getMessage().getMessageId());
+                            try {
+                                execute(delete);
+                            }
+                            catch (TelegramApiException e) {
+                                e.printStackTrace();
+                            }
                             break;
                         }
                         case -1: {
-                            enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo.\n*2.* Retirar dinero.\n*3.* Depositar dinero.\n*4.* Crear cuenta.\n*5.* Salir.");
+                            enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo\n*2.* Retirar dinero\n*3.* Depositar dinero\n*4.* Crear cuenta\n*5.* Salir");
                             enviarMensaje(update,"Elija una opción:");
                             usuarios.get(i).setEstado(0);
                             break;
@@ -132,23 +170,17 @@ public class Atm extends TelegramLongPollingBot {
                                 //String listaCuentas="";
                                 int flag=0;
                                 if ((usuarios.get(i).getCuentas().size())>0) {
-                                    int j=1;
-                                    for (Cuenta cuenta : usuarios.get(i).getCuentas()) {
-                                        usuarios.get(i).setListaCuentas("*"+j+".* _"+cuenta.getTipo()+"_ "+cuenta.getNumero()+"\n");// listaCuentas=listaCuentas+"*"+j+".* _"+cuenta.getTipo()+"_ "+cuenta.getNumero()+"\n";
-                                        j++;
-                                    }
                                     flag=1;
                                 }
                                 switch (usuarios.get(i).getOpcion()) {
                                     case 1: {
-                                        if (flag==0) {         /// VER POSIBILIDAD DE BOTONES
+                                        if (flag==0) {
                                             enviarMensaje(update,"Usted no tiene registrada ninguna cuenta. Para consultar esta opción, primero *cree una cuenta*.");
-                                            enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo.\n*2.* Retirar dinero.\n*3.* Depositar dinero.\n*4.* Crear cuenta.\n*5.* Salir.");
-                                            enviarMensaje(update,"Elija una opción:");
-                                            usuarios.get(i).setEstado(0);
+                                            usuarios.get(i).setEstado(-1);
                                         }
                                         else {
-                                            enviarMensaje(update,"Seleccione una de sus cuentas:\n"+usuarios.get(i).getListaCuentas());
+                                            enviarMensaje(update,"_Visualización de saldo_\n\n"+usuarios.get(i).getListaCuentas());
+                                            enviarMensaje(update,"Seleccione una de sus cuentas:");
                                             usuarios.get(i).setEstado(1);
                                         }
                                         break;
@@ -156,12 +188,11 @@ public class Atm extends TelegramLongPollingBot {
                                     case 2: {
                                         if (flag==0) {
                                             enviarMensaje(update,"Usted no tiene registrada ninguna cuenta. Para consultar esta opción, primero *cree una cuenta*.");
-                                            enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo.\n*2.* Retirar dinero.\n*3.* Depositar dinero.\n*4.* Crear cuenta.\n*5.* Salir.");
-                                            enviarMensaje(update,"Elija una opción:");
-                                            usuarios.get(i).setEstado(0);
+                                            usuarios.get(i).setEstado(-1);
                                         }
                                         else {
-                                            enviarMensaje(update,"Seleccione una de sus cuentas:\n"+usuarios.get(i).getListaCuentas());
+                                            enviarMensaje(update,"_Transacción - Retiro_\n\n"+usuarios.get(i).getListaCuentas());
+                                            enviarMensaje(update,"Seleccione una de sus cuentas:");
                                             usuarios.get(i).setEstado(2);
                                         }
                                         break;
@@ -169,18 +200,18 @@ public class Atm extends TelegramLongPollingBot {
                                     case 3: {
                                         if (flag==0) {
                                             enviarMensaje(update,"Usted no tiene registrada ninguna cuenta. Para consultar esta opción, primero *cree una cuenta*.");
-                                            enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo.\n*2.* Retirar dinero.\n*3.* Depositar dinero.\n*4.* Crear cuenta.\n*5.* Salir.");
-                                            enviarMensaje(update,"Elija una opción:");
-                                            usuarios.get(i).setEstado(0);
+                                            usuarios.get(i).setEstado(-1);
                                         }
                                         else {
-                                            enviarMensaje(update,"Seleccione una de sus cuentas:\n"+usuarios.get(i).getListaCuentas());
+                                            enviarMensaje(update,"_Transacción - Depósito_\n\n"+usuarios.get(i).getListaCuentas());
+                                            enviarMensaje(update,"Seleccione una de sus cuentas:");
                                             usuarios.get(i).setEstado(3);
                                         }
                                         break;
                                     }
                                     case 4: {
-                                        enviarMensaje(update,"Seleccione la moneda de su nueva cuenta:\n*1.* Bolivianos\n*2.* Dólares");
+                                        enviarMensaje(update,"_Creación de cuenta - Moneda_\n\n*1.* Bolivianos\n*2.* Dólares");
+                                        enviarMensaje(update,"Seleccione la moneda de su nueva cuenta:");
                                         usuarios.get(i).setEstado(4);
                                         break;
                                     }
@@ -191,7 +222,8 @@ public class Atm extends TelegramLongPollingBot {
                                         break;
                                     }
                                     default: {
-                                        enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo.\n*2.* Retirar dinero.\n*3.* Depositar dinero.\n*4.* Crear cuenta.\n*5.* Salir.");
+                                        enviarMensaje(update,"*¡Opción no válida!* ⚠️\nIntente de nuevo.️️");
+                                        enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo\n*2.* Retirar dinero\n*3.* Depositar dinero\n*4.* Crear cuenta\n*5.* Salir");
                                         enviarMensaje(update,"Elija una opción:");
                                         usuarios.get(i).setEstado(0);
                                         break;
@@ -200,7 +232,8 @@ public class Atm extends TelegramLongPollingBot {
                             }
                             catch (NumberFormatException e) {
                                 e.printStackTrace();
-                                enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo.\n*2.* Retirar dinero.\n*3.* Depositar dinero.\n*4.* Crear cuenta.\n*5.* Salir.");
+                                enviarMensaje(update,"*¡Opción no válida!* ⚠️\nIntente de nuevo.️️");
+                                enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo\n*2.* Retirar dinero\n*3.* Depositar dinero\n*4.* Crear cuenta\n*5.* Salir");
                                 enviarMensaje(update,"Elija una opción:");
                                 usuarios.get(i).setEstado(0);
                             }
@@ -215,28 +248,24 @@ public class Atm extends TelegramLongPollingBot {
                                     if ((usuarios.get(i).getOpcionCuenta())==(j+1)) {
                                         flag=1;
                                         enviarMensaje(update,usuarios.get(i).getCuentas().get(j).toString());
-                                        //
-                                        //
-                                        // botón maybe
-                                        //
-                                        //
-                                        //
                                         break;
                                     }
                                 }
                                 if (flag==0) {
-                                    enviarMensaje(update,"Seleccione una de sus cuentas:\n"+usuarios.get(i).getListaCuentas());
+                                    enviarMensaje(update,"*¡Elección no válida!* ⚠️\nIntente de nuevo.️️");
+                                    enviarMensaje(update,"_Visualización de saldo_\n\n"+usuarios.get(i).getListaCuentas());
+                                    enviarMensaje(update,"Seleccione una de sus cuentas:");
                                     usuarios.get(i).setEstado(1);
                                 }
                                 else {
-                                    enviarMensaje(update,"_Menú Principal_\n\n*1.* Ver saldo.\n*2.* Retirar dinero.\n*3.* Depositar dinero.\n*4.* Crear cuenta.\n*5.* Salir.");
-                                    enviarMensaje(update,"Elija una opción:");
-                                    usuarios.get(i).setEstado(0);
+                                    usuarios.get(i).setEstado(-1);
                                 }
                             }
-                            catch (Exception e) { // NumberFormatException más específico
+                            catch (NumberFormatException e) {
                                 e.printStackTrace();
-                                enviarMensaje(update,"Seleccione una de sus cuentas:\n"+usuarios.get(i).getListaCuentas());
+                                enviarMensaje(update,"*¡Elección no válida!* ⚠️\nIntente de nuevo.️️");
+                                enviarMensaje(update,"_Visualización de saldo_\n\n"+usuarios.get(i).getListaCuentas());
+                                enviarMensaje(update,"Seleccione una de sus cuentas:");
                                 usuarios.get(i).setEstado(1);
                             }
                             break;
@@ -248,57 +277,66 @@ public class Atm extends TelegramLongPollingBot {
                                 usuarios.get(i).setOpcionCuenta(opcCuenta);
                                 for (int j=0; j<usuarios.get(i).getCuentas().size(); j++) {
                                     if ((usuarios.get(i).getOpcionCuenta())==(j+1)) {
-                                        flag=1;
-                                        enviarMensaje(update,"Saldo actual: "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda());
-                                        enviarMensaje(update,"Ingrese la cantidad a retirar (en "+usuarios.get(i).getCuentas().get(j).getMoneda()+"):");
+                                        if (usuarios.get(i).getCuentas().get(j).getSaldo()<=0) {
+                                            flag=-1;
+                                            enviarMensaje(update,"💳 El saldo actual de la cuenta que seleccionó es "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda()+", por lo que no puede realizar retiros. Seleccione otra cuenta o realice una transacción diferente.");
+                                        }
+                                        else {
+                                            flag=1;
+                                            enviarMensaje(update,"Saldo actual: "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda());
+                                            enviarMensaje(update,"Ingrese la cantidad a retirar (en "+usuarios.get(i).getCuentas().get(j).getMoneda()+"):"); 
+                                        }
                                         break;
                                     }
                                 }
                                 if (flag==0) {
-                                    enviarMensaje(update,"Seleccione una de sus cuentas:\n"+usuarios.get(i).getListaCuentas());
+                                    enviarMensaje(update,"*¡Elección no válida!* ⚠️\nIntente de nuevo.️️");
+                                    enviarMensaje(update,"_Transacción - Retiro_\n\n"+usuarios.get(i).getListaCuentas());
+                                    enviarMensaje(update,"Seleccione una de sus cuentas:");
                                     usuarios.get(i).setEstado(2);
+                                }
+                                else if (flag==-1) {
+                                    usuarios.get(i).setEstado(-1);
                                 }
                                 else {
                                     usuarios.get(i).setEstado(21);
                                 }
                             }
-                            catch (Exception e) {
+                            catch (NumberFormatException e) {
                                 e.printStackTrace();
-                                enviarMensaje(update,"Seleccione una de sus cuentas:\n"+usuarios.get(i).getListaCuentas());
+                                enviarMensaje(update,"*¡Elección no válida!* ⚠️\nIntente de nuevo.️️");
+                                enviarMensaje(update,"_Transacción - Retiro_\n\n"+usuarios.get(i).getListaCuentas());
+                                enviarMensaje(update,"Seleccione una de sus cuentas:");
                                 usuarios.get(i).setEstado(2);
                             }
                             break;
                         }
                         case 21: {
-                            for (int j=0; j<usuarios.get(i).getCuentas().size(); j++) {
-                                try {
-                                    double monto=Double.parseDouble(update.getMessage().getText()); // se podría mejorar
-                                    usuarios.get(i).setMonto(monto);
+                            try {
+                                double monto=Double.parseDouble(update.getMessage().getText());
+                                usuarios.get(i).setMonto(monto);
+                                for (int j=0; j<usuarios.get(i).getCuentas().size(); j++) {
                                     if ((usuarios.get(i).getOpcionCuenta())==(j+1)) {
                                         if ((usuarios.get(i).getMonto()>0) && (usuarios.get(i).getMonto()<=usuarios.get(i).getCuentas().get(j).getSaldo())) {
                                             usuarios.get(i).getCuentas().get(j).setSaldo((usuarios.get(i).getCuentas().get(j).getSaldo())-(usuarios.get(i).getMonto()));
-                                            enviarMensaje(update,"Transacción realizada exitosamente. ✅\nNuevo saldo: "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda());
+                                            enviarMensaje(update,"*Transacción realizada exitosamente.* ✅\nNuevo saldo: "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda());
                                             usuarios.get(i).setEstado(-1);
                                         }
                                         else { // if (monto==0 || monto<0 || monto>saldo) 
                                             enviarMensaje(update,"El monto ingresado no es válido. Ingrese un monto diferente.");
                                             // OK.
-                                            enviarMensaje(update,"Saldo actual: "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda());
-                                            enviarMensaje(update,"Ingrese la cantidad a retirar (en "+usuarios.get(i).getCuentas().get(j).getMoneda()+"):");
-                                            usuarios.get(i).setEstado(21);
+                                            usuarios.get(i).setEstado(2);
                                         }
                                         break;
                                     }
                                 }
-                                catch (NumberFormatException e) {
-                                    e.printStackTrace();
-                                    enviarMensaje(update,"No puede ingresar un valor que no sea un número real. Ingrese un valor diferente.");
-                                    // botón
-                                    enviarMensaje(update,"Saldo actual: "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda());
-                                    enviarMensaje(update,"Ingrese la cantidad a retirar (en "+usuarios.get(i).getCuentas().get(j).getMoneda()+"):");
-                                    usuarios.get(i).setEstado(21);
-                                }
                             }
+                            catch (NumberFormatException e) {
+                                e.printStackTrace();
+                                enviarMensaje(update,"No puede ingresar un valor que no sea un número real. Ingrese un valor diferente.");
+                                    // OK.
+                                    usuarios.get(i).setEstado(2);
+                                }
                             break;
                         }
                         case 3: { // depositar dinero
@@ -315,49 +353,49 @@ public class Atm extends TelegramLongPollingBot {
                                     }
                                 }
                                 if (flag==0) {
-                                    enviarMensaje(update,"Seleccione una de sus cuentas:\n"+usuarios.get(i).getListaCuentas());
+                                    enviarMensaje(update,"*¡Elección no válida!* ⚠️\nIntente de nuevo.️️");
+                                    enviarMensaje(update,"_Transacción - Depósito_\n\n"+usuarios.get(i).getListaCuentas());
+                                    enviarMensaje(update,"Seleccione una de sus cuentas:");
                                     usuarios.get(i).setEstado(3);
                                 }
                                 else {
                                     usuarios.get(i).setEstado(31);
                                 }
                             }
-                            catch (Exception e) {
+                            catch (NumberFormatException e) {
                                 e.printStackTrace();
-                                enviarMensaje(update,"Seleccione una de sus cuentas:\n"+usuarios.get(i).getListaCuentas());
+                                enviarMensaje(update,"*¡Elección no válida!* ⚠️\nIntente de nuevo.️️");
+                                enviarMensaje(update,"_Transacción - Depósito_\n\n"+usuarios.get(i).getListaCuentas());
+                                enviarMensaje(update,"Seleccione una de sus cuentas:");
                                 usuarios.get(i).setEstado(3);
                             }
                             break;
                         }
                         case 31: {
-                            for (int j=0; j<usuarios.get(i).getCuentas().size(); j++) {
-                                try {
-                                    double monto=Double.parseDouble(update.getMessage().getText()); // se podría mejorar
-                                    usuarios.get(i).setMonto(monto);
+                            try {
+                                double monto=Double.parseDouble(update.getMessage().getText());
+                                usuarios.get(i).setMonto(monto);
+                                for (int j=0; j<usuarios.get(i).getCuentas().size(); j++) {
                                     if ((usuarios.get(i).getOpcionCuenta())==(j+1)) {
                                         if ((usuarios.get(i).getMonto()>0)) {
                                             usuarios.get(i).getCuentas().get(j).setSaldo((usuarios.get(i).getCuentas().get(j).getSaldo())+(usuarios.get(i).getMonto()));
-                                            enviarMensaje(update,"Transacción realizada exitosamente. ✅\nNuevo saldo: "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda());
+                                            enviarMensaje(update,"*Transacción realizada exitosamente.* ✅\nNuevo saldo: "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda());
                                             usuarios.get(i).setEstado(-1);
                                         }
                                         else { // if (monto==0 || monto<0)
                                             enviarMensaje(update,"El monto ingresado no es válido. Ingrese un monto diferente.");
                                             // OK.
-                                            enviarMensaje(update,"Saldo actual: "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda());
-                                            enviarMensaje(update,"Ingrese la cantidad a depositar (en "+usuarios.get(i).getCuentas().get(j).getMoneda()+"):");
-                                            usuarios.get(i).setEstado(31);
+                                            usuarios.get(i).setEstado(3);
                                         }
                                         break;
                                     }
                                 }
-                                catch (NumberFormatException e) {
-                                    e.printStackTrace();
-                                    enviarMensaje(update,"No puede ingresar un valor que no sea un número real. Ingrese un valor diferente.");
-                                    // botón
-                                    enviarMensaje(update,"Saldo actual: "+usuarios.get(i).getCuentas().get(j).getSaldo()+" "+usuarios.get(i).getCuentas().get(j).getMoneda());
-                                    enviarMensaje(update,"Ingrese la cantidad a depositar (en "+usuarios.get(i).getCuentas().get(j).getMoneda()+"):");
-                                    usuarios.get(i).setEstado(31);
-                                }
+                            }
+                            catch (NumberFormatException e) {
+                                e.printStackTrace();
+                                enviarMensaje(update,"No puede ingresar un valor que no sea un número real. Ingrese un valor diferente.");
+                                // OK.
+                                usuarios.get(i).setEstado(3);
                             }
                             break;
                         }
@@ -372,16 +410,21 @@ public class Atm extends TelegramLongPollingBot {
                                     usuarios.get(i).setOpcMoneda("Dólares");
                                 }
                                 else {
-                                    enviarMensaje(update,"Seleccione la moneda de su nueva cuenta:\n*1.* Bolivianos\n*2.* Dólares");
+                                    enviarMensaje(update,"*¡Elección no válida!* ⚠️\nIntente de nuevo.️️");
+                                    enviarMensaje(update,"_Creación de cuenta - Moneda_\n\n*1.* Bolivianos\n*2.* Dólares");
+                                    enviarMensaje(update,"Seleccione la moneda de su nueva cuenta:");
                                     usuarios.get(i).setEstado(4);
                                     break; // importante
                                 }
-                                enviarMensaje(update,"Seleccione el tipo de su nueva cuenta:\n1. Cuenta Corriente\n2. Caja de Ahorros");
+                                enviarMensaje(update,"_Creación de cuenta - Tipo_\n\n*1.* Cuenta Corriente\n*2.* Caja de Ahorros");
+                                enviarMensaje(update,"Seleccione el tipo de su nueva cuenta:");
                                 usuarios.get(i).setEstado(41);
                             }
                             catch (NumberFormatException e) {
                                 e.printStackTrace();
-                                enviarMensaje(update,"Seleccione la moneda de su nueva cuenta:\n*1.* Bolivianos\n*2.* Dólares");
+                                enviarMensaje(update,"*¡Elección no válida!* ⚠️\nIntente de nuevo.️️");
+                                enviarMensaje(update,"_Creación de cuenta - Moneda_\n\n*1.* Bolivianos\n*2.* Dólares");
+                                enviarMensaje(update,"Seleccione la moneda de su nueva cuenta:");
                                 usuarios.get(i).setEstado(4);
                             }
                             break;
@@ -397,7 +440,9 @@ public class Atm extends TelegramLongPollingBot {
                                     usuarios.get(i).setOpcTipo("Caja de Ahorros");
                                 }
                                 else {
-                                    enviarMensaje(update,"Seleccione el tipo de su nueva cuenta:\n1. Cuenta Corriente\n2. Caja de Ahorros");
+                                    enviarMensaje(update,"*¡Elección no válida!* ⚠️\nIntente de nuevo.️️");
+                                    enviarMensaje(update,"_Creación de cuenta - Tipo_\n\n*1.* Cuenta Corriente\n*2.* Caja de Ahorros");
+                                    enviarMensaje(update,"Seleccione el tipo de su nueva cuenta:");
                                     usuarios.get(i).setEstado(41);
                                     break; // importante
                                 }
@@ -405,34 +450,15 @@ public class Atm extends TelegramLongPollingBot {
                                 usuarios.get(i).setCuentaGenerada(cuentaGen);
                                 Cuenta nuevaCuenta=new Cuenta(usuarios.get(i).getCuentaGenerada(),usuarios.get(i).getOpcMoneda(),usuarios.get(i).getOpcTipo(),0);
                                 usuarios.get(i).addCuenta(nuevaCuenta); // importante
-                                
-                                SendMessage sendMessage=new SendMessage();
-                                sendMessage.setText("Se le ha creado una cuenta de tipo "+usuarios.get(i).getOpcTipo()+", en "+usuarios.get(i).getOpcMoneda()+" y con un saldo inicial igual a 0.00. *¡Felicidades!*\nEl número de su cuenta es: "+usuarios.get(i).getCuentaGenerada());
-                                sendMessage.setParseMode(ParseMode.MARKDOWN);
-                                sendMessage.setChatId(message.getChatId().toString());
-                                
-                                InlineKeyboardMarkup ikm=new InlineKeyboardMarkup();
-                                List<List<InlineKeyboardButton>> inlineButtons=new ArrayList<>();
-                                List<InlineKeyboardButton> lista=new ArrayList<>();
-                                InlineKeyboardButton button1=new InlineKeyboardButton();
-                                button1.setText("OK. ¡Gracias!");
-                                button1.setCallbackData("menu_principal");
-                                lista.add(button1);
-                                inlineButtons.add(lista);
-                                ikm.setKeyboard(inlineButtons);
-                                sendMessage.setReplyMarkup(ikm);
-                                try {
-                                    execute(sendMessage);
-                                }
-                                catch (TelegramApiException e) {
-                                    e.printStackTrace();
-                                }
-                                //enviarMensajeBoton(update,"Se le ha creado una cuenta de tipo "+usuarios.get(i).getOpcTipo()+", en "+usuarios.get(i).getOpcMoneda()+" y con un saldo inicial igual a 0.00. ¡Felicidades!\nEl número de su cuenta es : "+usuarios.get(i).getCuentaGenerada(),ikm);
+                                enviarMensaje(update,"Se le ha creado una cuenta de tipo "+usuarios.get(i).getOpcTipo()+", en "+usuarios.get(i).getOpcMoneda()+" y con un saldo inicial igual a 0.00. *¡Felicidades!* 💸\nEl número de su cuenta es: "+usuarios.get(i).getCuentaGenerada());
+                                usuarios.get(i).setListaCuentas(usuarios.get(i).getListaCuentas()+"*"+usuarios.get(i).getCuentas().size()+".* _"+usuarios.get(i).getOpcTipo()+"_ "+usuarios.get(i).getCuentaGenerada()+"\n");// listaCuentas=listaCuentas+"*"+j+".* _"+cuenta.getTipo()+"_ "+cuenta.getNumero()+"\n";
                                 usuarios.get(i).setEstado(-1);
                             }
                             catch (NumberFormatException e) {
                                 e.printStackTrace();
-                                enviarMensaje(update,"Seleccione el tipo de su nueva cuenta:\n1. Cuenta Corriente\n2. Caja de Ahorros");
+                                enviarMensaje(update,"*¡Elección no válida!* ⚠️\nIntente de nuevo.️️");
+                                enviarMensaje(update,"_Creación de cuenta - Tipo_\n\n*1.* Cuenta Corriente\n*2.* Caja de Ahorros");
+                                enviarMensaje(update,"Seleccione el tipo de su nueva cuenta:");
                                 usuarios.get(i).setEstado(41);
                             }
                             break;
@@ -442,51 +468,6 @@ public class Atm extends TelegramLongPollingBot {
                 }
             }
         }
-        }
-        if (update.hasCallbackQuery()) { // else if (update.hasInlineQuery()) { // 
-            Message message=update.getCallbackQuery().getMessage();
-            CallbackQuery cbq=update.getCallbackQuery();
-            // String x=update.getCallbackQuery().getId();
-            //Long id=cbq.getFrom().getId();
-            String data=cbq.getData();
-            //int estado=0;
-            
-            /*AnswerCallbackQuery acq=new AnswerCallbackQuery();
-            acq.setCallbackQueryId(x);
-            acq.setText("a");
-            acq.notify();*/
-            
-            SendMessage sendMessage=new SendMessage();
-            sendMessage.setParseMode(ParseMode.MARKDOWN);
-            sendMessage.setChatId(message.getChatId().toString()); // why?
-            //sendMessage.setChatId(update.getMessage().getChatId().toString());
-            if (data.equals("menu_principal")) {
-                
-                System.out.println("\nFUNCIONAAAAAAAAAAAAAAAAAAAAa\n");
-                
-                sendMessage.setText("Elija una opción:\n1. Ver saldo.\n2. Retirar dinero.\n3. Depositar dinero.\n4. Crear cuenta.\n5. Salir.");
-                //estado=0;
-            }
-            else if (data.equals("otra_cosa")) {
-                //estado=-1;
-            }
-            //else {}
-            
-            try {
-                execute(sendMessage);
-            }
-            catch (TelegramApiException e) {
-                e.printStackTrace();
-            }
-            
-            /*for (int i=0; i<usuarios.size(); i++) {
-                if ((usuarios.get(i).getUserId()).equals(id)) {
-                    usuarios.get(i).setEstado(estado);
-                    break; 
-                }
-            }*/
-        }
-        // else { }
     }
   
     public void enviarMensaje(Update update,String mensaje) {
@@ -502,13 +483,13 @@ public class Atm extends TelegramLongPollingBot {
 	}
     }
     
-    public void enviarMensajeBoton(Update update,String mensaje,InlineKeyboardMarkup ikm) {
+    public void enviarMensajeBoton(Update update,String mensaje,ReplyKeyboardMarkup rkm) {
         SendMessage message=new SendMessage(); // crea el objeto para enviar el mensaje
 	// message.setChatId(message.getChatId()); // por qué no funciona?
         message.setChatId(update.getMessage().getChatId().toString()); // define a quién se le enviará el mensaje
 	message.setText(mensaje);
         message.setParseMode(ParseMode.MARKDOWN);
-        message.setReplyMarkup(ikm);
+        message.setReplyMarkup(rkm);
 	try {
             execute(message); // envía el mensaje
 	}
